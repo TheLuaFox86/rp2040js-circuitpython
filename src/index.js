@@ -44,7 +44,11 @@ const tcpConsole = startTcpConsole({
 const CYCLES_PER_MS = 133000;
 const MAX_CYCLES_PER_TICK = 100000;
 const MAX_INPUT_PER_TICK = 64;
-
+var go = false
+tcpConsole.server.on("connection", () => {
+  go = true
+})
+while (!go) {}
 let lastTime = performance.now();
 let cycleDebt = 0;
 

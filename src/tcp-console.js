@@ -66,6 +66,7 @@ function startTcpConsole({ host, port, onSerialBytes }) {
         bufferedOutput = bufferedOutput.subarray(-MAX_BUFFERED_OUTPUT);
       }
     },
+    server = server
   };
 }
 
