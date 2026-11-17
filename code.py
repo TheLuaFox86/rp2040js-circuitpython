@@ -1,3 +1,6 @@
+import time
+time.sleep(1)
+
 print("BOOT START")
 
 
