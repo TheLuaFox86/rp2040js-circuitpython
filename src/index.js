@@ -5,7 +5,7 @@ const BOARD_CONFIG = {
   firmwarePath: 'firmware/firm.uf2',
   firmwareEntryPoint: 0x10000000,
   internalFilesystem: {
-    imagePath: 'fat12.img',
+    imagePath: 'firmware/firmfs.img',
     flashOffset: 1024 * 1024,
   },
   serial: {
