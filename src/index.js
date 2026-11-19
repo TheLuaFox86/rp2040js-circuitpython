@@ -22,6 +22,27 @@ const BOARD_CONFIG = {
     },
     cards: [],
   },
+  tft: {
+    enabled: true,
+    controller: 0,
+    width: 240,
+    height: 240,
+    pins: {
+      chipSelect: 13,
+      dataCommand: 14,
+      reset: 15,
+    },
+  },
+  cardkb: {
+    enabled: true,
+    controller: 0,
+    address: 0x5f,
+  },
+  web: {
+    enabled: true,
+    host: '127.0.0.1',
+    port: Number(process.env.WEB_PORT) || 8080,
+  },
   onReset(resetCount) {
     console.log(`[reset #${resetCount}] at time ${Date.now()}`);
   },

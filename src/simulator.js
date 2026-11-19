@@ -8,6 +8,9 @@ const { startTcpConsole } = require('./tcp-console');
 const { createGPIOApi } = require('./gpio-api');
 const { SDCardImage } = require('./sd-card');
 const { SPIPeripheral } = require('./spi0');
+const { CardKB, CARDKB_ADDRESS } = require('./cardkb');
+const { ST7789 } = require('./st7789');
+const { startWebUI } = require('./web-ui');
 
 const CYCLES_PER_TICK = 100_000;
 const MAX_ELAPSED_MS = 50;
@@ -128,6 +131,22 @@ function createSimulator(config) {
   if (config.onUSBConnected !== undefined && typeof config.onUSBConnected !== 'function') {
     throw new TypeError('onUSBConnected must be a function');
   }
+  if (config.web !== undefined) {
+    if (!config.web || typeof config.web !== 'object') {
+      throw new TypeError('web config must be an object');
+    }
+    if (config.web.enabled !== undefined && typeof config.web.enabled !== 'boolean') {
+      throw new TypeError('web enabled must be a boolean');
+    }
+    if (config.web.enabled) {
+      const host = config.web.host ?? '127.0.0.1';
+      const port = config.web.port ?? 8080;
+      if (typeof host !== 'string' || !host ||
+        !Number.isInteger(port) || port < 0 || port > 65535) {
+        throw new TypeError('web config requires a host and valid port');
+      }
+    }
+  }
 
   const rp2040 = new RP2040();
   rp2040.loadBootrom(bootromB1);
@@ -213,7 +232,77 @@ function createSimulator(config) {
     card.setSelected(pin.value === GPIOPinState.Low);
   }
 
-  rp2040.peripherals[0x4003c + spiIndex * 4] = new SPIPeripheral(rp2040, cards, misoPin);
+  const tftConfig = config.tft || {};
+  let tft = null;
+  let cardkb = null;
+  const devices = [...cards];
+  const cardkbConfig = config.cardkb || {};
+  try {
+    if (tftConfig.enabled !== undefined && typeof tftConfig.enabled !== 'boolean') {
+      throw new TypeError('TFT enabled must be a boolean');
+    }
+    if (cardkbConfig.enabled !== undefined && typeof cardkbConfig.enabled !== 'boolean') {
+      throw new TypeError('CardKB enabled must be a boolean');
+    }
+    if (tftConfig.enabled) {
+      if (tftConfig.controller !== undefined && tftConfig.controller !== spiIndex) {
+        throw new Error('TFT controller must match the configured SPI controller');
+      }
+      const tftPins = {
+        chipSelect: 13,
+        dataCommand: 14,
+        reset: 15,
+        ...tftConfig.pins,
+      };
+      for (const [name, pin] of Object.entries(tftPins)) {
+        if (!Number.isInteger(pin) || pin < 0 || pin >= rp2040.gpio.length) {
+          throw new RangeError(`Invalid TFT ${name} GPIO: ${pin}`);
+        }
+        if (configuredPins.has(pin)) throw new Error(`TFT ${name} cannot share SPI GPIO${pin}`);
+        if (name === 'chipSelect' && chipSelectPins.has(pin)) {
+          throw new Error(`TFT chip select cannot share GPIO${pin} with another device`);
+        }
+        if (name !== 'chipSelect' && chipSelectPins.has(pin)) {
+          throw new Error(`TFT ${name} cannot share GPIO${pin} with a chip select`);
+        }
+        configuredPins.add(pin);
+      }
+      if (new Set(Object.values(tftPins)).size !== Object.keys(tftPins).length) {
+        throw new Error('TFT GPIO pins cannot overlap');
+      }
+      for (const [name, size] of [['width', tftConfig.width ?? 240], ['height', tftConfig.height ?? 240]]) {
+        if (!Number.isInteger(size) || size < 1 || size > 320) {
+          throw new RangeError(`TFT ${name} must be an integer from 1 to 320`);
+        }
+      }
+      tft = new ST7789(rp2040, { ...tftConfig, pins: tftPins });
+      const chipSelectPin = rp2040.gpio[tftPins.chipSelect];
+      chipSelectPin.addListener((state) => {
+        tft.selected = state === GPIOPinState.Low;
+        if (!tft.selected) tft.flushFrame();
+      });
+      tft.selected = chipSelectPin.value === GPIOPinState.Low;
+      chipSelectPins.add(tftPins.chipSelect);
+      devices.push(tft);
+    }
+
+    if (cardkbConfig.enabled) {
+      const controller = cardkbConfig.controller ?? 0;
+      const address = cardkbConfig.address ?? CARDKB_ADDRESS;
+      if (!Number.isInteger(controller) || controller < 0 || controller > 1) {
+        throw new RangeError('CardKB I2C controller must be 0 or 1');
+      }
+      if (!Number.isInteger(address) || address < 0x08 || address > 0x77) {
+        throw new RangeError('CardKB I2C address must be a 7-bit address');
+      }
+      cardkb = new CardKB(rp2040.i2c[controller], address);
+    }
+  } catch (error) {
+    for (const card of cards) card.close();
+    throw error;
+  }
+
+  rp2040.peripherals[0x4003c + spiIndex * 4] = new SPIPeripheral(rp2040, devices, misoPin);
 
   const inputQueue = [];
   let inputHead = 0;
@@ -228,6 +317,7 @@ function createSimulator(config) {
   };
 
   let tcpConsole;
+  let webUI;
   let gdbServer;
   const gdbClients = new Set();
   let started = false;
@@ -278,6 +368,25 @@ function createSimulator(config) {
       tcpConsole = undefined;
       throw error;
     }
+    if (config.web?.enabled === true) {
+      const webConfig = config.web || {};
+      webUI = startWebUI({
+        host: webConfig.host || '127.0.0.1',
+        port: webConfig.port ?? 8080,
+        tftEnabled: !!tft,
+        cardkbEnabled: !!cardkb,
+        onKey(key) {
+          cardkb.pressKey(key);
+        },
+        getFrame() {
+          return webUI?.getFrame();
+        },
+      });
+      if (tft) {
+        tft.onFrame = (frame) => webUI?.publishFrame(frame);
+        tft.flushFrame();
+      }
+    }
     started = true;
     executionLoop.start();
     return simulator;
@@ -289,6 +398,7 @@ function createSimulator(config) {
     started = false;
     rp2040.stop();
     tcpConsole?.close();
+    webUI?.close();
     for (const socket of gdbClients) socket.destroy();
     gdbServer?.socketServer?.close();
     for (const card of cards) card.close();
@@ -298,12 +408,15 @@ function createSimulator(config) {
     rp2040,
     cdc,
     gpio,
+    tft,
+    cardkb,
     start,
     stop,
     get servers() {
       return {
         serial: tcpConsole?.server,
         gdb: gdbServer?.socketServer,
+        web: webUI?.server,
       };
     },
   };

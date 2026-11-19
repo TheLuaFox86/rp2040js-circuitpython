@@ -10,9 +10,9 @@ const INTERRUPT_RX_OVERFLOW = 1 << 3;
 const INTERRUPT_RX = 1 << 4;
 
 class SPIPeripheral extends BasePeripheral {
-  constructor(rp2040, cards, misoPin) {
+  constructor(rp2040, devices, misoPin) {
     super(rp2040, 'SPI_SD_BUS');
-    this.cards = cards;
+    this.devices = devices;
     this.misoPin = misoPin;
     this.resetRegisters();
   }
@@ -149,8 +149,8 @@ class SPIPeripheral extends BasePeripheral {
 
   transferByte(transmitByte) {
     let receiveByte = 0xff;
-    for (const card of this.cards) {
-      if (card.selected) receiveByte &= card.transfer(transmitByte);
+    for (const device of this.devices) {
+      if (device.selected) receiveByte &= device.transfer(transmitByte);
     }
     if (this.misoPin !== undefined) {
       const pin = this.rp2040.gpio[this.misoPin];

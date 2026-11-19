@@ -4,6 +4,7 @@ const net = require('node:net');
 const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const { once } = require('node:events');
 const { BOARD_CONFIG, createSimulator } = require('../src');
 
 function makeImage(directory, name) {
@@ -19,6 +20,7 @@ test('firmware runs before a Telnet client connects', async (t) => {
     ...BOARD_CONFIG,
     serial: { host: '127.0.0.1', port: 0 },
     gdbPort: 0,
+    web: { enabled: false },
     spi: { ...BOARD_CONFIG.spi, cards: [] },
   });
   t.after(() => simulator.stop());
@@ -31,11 +33,39 @@ test('firmware runs before a Telnet client connects', async (t) => {
   assert.ok(simulator.servers.serial.listening);
 });
 
+test('optional display and CardKB are exposed through the local web UI', async (t) => {
+  const simulator = createSimulator({
+    ...BOARD_CONFIG,
+    serial: { host: '127.0.0.1', port: 0 },
+    gdbPort: 0,
+    web: { enabled: true, host: '127.0.0.1', port: 0 },
+    tft: { ...BOARD_CONFIG.tft, enabled: true },
+    cardkb: { ...BOARD_CONFIG.cardkb, enabled: true },
+    spi: { ...BOARD_CONFIG.spi, cards: [] },
+  });
+  t.after(() => simulator.stop());
+
+  assert.ok(simulator.tft);
+  assert.ok(simulator.cardkb);
+  simulator.start();
+  await once(simulator.servers.web, 'listening');
+  const baseUrl = `http://127.0.0.1:${simulator.servers.web.address().port}`;
+  const response = await fetch(`${baseUrl}/keyboard`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key: 'z' }),
+  });
+
+  assert.equal(response.status, 204);
+  assert.deepEqual(simulator.cardkb.keys, ['z'.charCodeAt(0)]);
+});
+
 test('Python script output is delivered without keyboard input', async (t) => {
   const simulator = createSimulator({
     ...BOARD_CONFIG,
     serial: { host: '127.0.0.1', port: 0 },
     gdbPort: 0,
+    web: { enabled: false },
     spi: { ...BOARD_CONFIG.spi, cards: [] },
   });
   t.after(() => simulator.stop());
@@ -83,6 +113,7 @@ test('multiple SD images share one SPI bus with separate GPIO chip selects', (t)
         { image: secondImage, chipSelect: 20 },
       ],
     },
+    web: { enabled: false },
   });
   t.after(() => simulator.stop());
 
@@ -119,6 +150,7 @@ test('MCU reset preserves external flash contents', (t) => {
     ...BOARD_CONFIG,
     serial: { host: '127.0.0.1', port: 0 },
     gdbPort: 0,
+    web: { enabled: false },
     spi: { ...BOARD_CONFIG.spi, cards: [] },
   });
   t.after(() => simulator.stop());
