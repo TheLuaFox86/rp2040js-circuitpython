@@ -3,6 +3,7 @@ import busio
 import displayio
 import time
 import random
+import rando
 from adafruit_st7789 import ST7789
 #from afafruit_bitmap_font import bitmap_font
 from adafruit_display_text import label
@@ -62,7 +63,6 @@ display.show(main_group)
 display.refresh()
 
 while True:
-    text_area.x = random.randint(20, 240)
-    text_area.y = random.randint(20, 240)
+    rando.rando(text_area)
     time.sleep(2)
     display.refresh()
