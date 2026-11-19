@@ -62,17 +62,29 @@ const PAGE = `<!doctype html>
     events.onopen = () => { status.dataset.connected = 'true'; };
     events.onerror = () => { status.dataset.connected = 'false'; };
     const keyboard = document.querySelector('#keyboard');
-    keyboard.addEventListener('keydown', async (event) => {
-      if (event.ctrlKey || event.metaKey || event.altKey || event.key.length !== 1 &&
-        !['Enter', 'Backspace', 'Tab', 'Escape'].includes(event.key)) return;
+    async function sendKey(key) {
+      try {
+        const response = await fetch('/keyboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key }),
+        });
+        if (!response.ok) status.textContent = 'Could not send key to CardKB.';
+      } catch {
+        status.textContent = 'Could not send key to CardKB.';
+      }
+    }
+    keyboard.addEventListener('beforeinput', (event) => {
+      if (event.inputType !== 'insertText' || !event.data || event.data.length !== 1) return;
       event.preventDefault();
-      const key = { Enter: '\\r', Backspace: '\\b', Tab: '\\t', Escape: '\\x1b' }[event.key] || event.key;
-      const response = await fetch('/keyboard', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key }),
-      });
-      if (!response.ok) status.textContent = 'Could not send key to CardKB.';
+      sendKey(event.data);
+    });
+    keyboard.addEventListener('keydown', (event) => {
+      if (event.ctrlKey || event.metaKey || event.altKey) return;
+      const key = { Enter: '\\r', Backspace: '\\b', Tab: '\\t', Escape: '\\x1b' }[event.key];
+      if (!key) return;
+      event.preventDefault();
+      sendKey(key);
     });
   </script>
 </body>
