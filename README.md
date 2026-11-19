@@ -46,7 +46,7 @@ cardkb: {
 },
 ```
 
-The TFT uses SPI0's existing GP18 SCK and GP19 MOSI pins, plus GP13 CS, GP14 D/C, and GP15 reset. The CardKB responds at I2C address `0x5f` on I2C0 (GP4 SDA, GP5 SCL by default); browser input is returned as one-byte ASCII values on I2C reads, with `0` when the key queue is empty. The web server binds to loopback by default and can be disabled with `web: { enabled: false }`. It has no authentication, so keep it on a trusted network.
+The TFT uses SPI0's existing GP18 SCK and GP19 MOSI pins, plus GP13 CS, GP14 D/C, and GP15 reset. The CardKB responds at I2C address `0x5f` on I2C0 (GP4 SDA, GP5 SCL by default); browser input is returned as one-byte ASCII values on I2C reads, with `0` when the key queue is empty. In the simulator, enabling CardKB models these I2C pins as idle-high to represent pull-ups; override them with `cardkb.pins` if using different pins. The web server binds to loopback by default and can be disabled with `web: { enabled: false }`. It has no authentication, so keep it on a trusted network.
 
 The CircuitPython CardKB driver is provided as [cardkb.py](./cardkb.py). Copy it into the simulator's internal filesystem image before running code that imports it:
 

@@ -295,6 +295,15 @@ function createSimulator(config) {
       if (!Number.isInteger(address) || address < 0x08 || address > 0x77) {
         throw new RangeError('CardKB I2C address must be a 7-bit address');
       }
+      const defaultPins = controller === 0 ? { sda: 4, scl: 5 } : { sda: 6, scl: 7 };
+      const i2cPins = { ...defaultPins, ...cardkbConfig.pins };
+      if (!Number.isInteger(i2cPins.sda) || i2cPins.sda < 0 || i2cPins.sda >= rp2040.gpio.length ||
+        !Number.isInteger(i2cPins.scl) || i2cPins.scl < 0 || i2cPins.scl >= rp2040.gpio.length ||
+        i2cPins.sda === i2cPins.scl) {
+        throw new RangeError('CardKB SDA and SCL must be distinct valid GPIO pins');
+      }
+      gpio.setInput(i2cPins.sda, true);
+      gpio.setInput(i2cPins.scl, true);
       cardkb = new CardKB(rp2040.i2c[controller], address);
     }
   } catch (error) {

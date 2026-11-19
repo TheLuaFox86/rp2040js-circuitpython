@@ -47,6 +47,8 @@ test('optional display and CardKB are exposed through the local web UI', async (
 
   assert.ok(simulator.tft);
   assert.ok(simulator.cardkb);
+  assert.equal(simulator.gpio.read(4).input, true);
+  assert.equal(simulator.gpio.read(5).input, true);
   simulator.start();
   await once(simulator.servers.web, 'listening');
   const baseUrl = `http://127.0.0.1:${simulator.servers.web.address().port}`;
