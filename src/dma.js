@@ -119,6 +119,7 @@ class DMAPeripheral extends BasePeripheral {
     const tx = txIndex === undefined ? null : this.channels[txIndex];
     const rx = rxIndex === undefined ? null : this.channels[rxIndex];
     const count = tx && rx ? Math.min(tx.count, rx.count) : (tx?.count ?? rx?.count ?? 0);
+    if (tx && rx && this.transferSPIBuffer(tx, rx, count)) return;
     for (let index = 0; index < count; index++) {
       let received = 0xff;
       if (tx) {
@@ -135,6 +136,39 @@ class DMAPeripheral extends BasePeripheral {
     }
     if (tx) tx.count = 0;
     if (rx) rx.count = 0;
+  }
+
+  transferSPIBuffer(tx, rx, count) {
+    if (count === 0 || ((tx.control >>> 2) & 0x3) !== 0 ||
+      ((rx.control >>> 2) & 0x3) !== 0 || !(tx.control & (1 << 4)) ||
+      (tx.control & (1 << 5)) || (rx.control & (1 << 4)) ||
+      tx.writeAddress !== rx.readAddress) return false;
+
+    const offset = tx.writeAddress & 0x3fff;
+    const peripheralKey = (tx.writeAddress >>> 14) << 2;
+    const spi = this.rp2040.peripherals[peripheralKey];
+    if (offset !== 0x08 || !spi || typeof spi.canTransferBuffer !== 'function' ||
+      !spi.canTransferBuffer()) return false;
+
+    const bytes = new Uint8Array(count);
+    for (let index = 0; index < count; index++) {
+      bytes[index] = this.rp2040.readUint8(tx.readAddress + index);
+    }
+    const received = spi.transferBuffer(bytes);
+    if (!received || received.length !== count) return false;
+
+    if (rx.control & (1 << 5)) {
+      for (let index = 0; index < count; index++) {
+        this.rp2040.writeUint8(rx.writeAddress + index, received[index]);
+      }
+      rx.writeAddress += count;
+    } else {
+      this.rp2040.writeUint8(rx.writeAddress, received[count - 1]);
+    }
+    tx.readAddress += count;
+    tx.count = 0;
+    rx.count = 0;
+    return true;
   }
 
   transferMemory(index) {

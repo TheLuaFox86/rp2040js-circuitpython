@@ -124,6 +124,24 @@ class SPIPeripheral extends BasePeripheral {
     }
     return receiveByte;
   }
+
+  canTransferBuffer() {
+    const selectedDevices = this.devices.filter((device) => device.selected);
+    return this.enabled && (this.ctrlr0 & 0xf) === 0x7 &&
+      selectedDevices.length === 1 && typeof selectedDevices[0].transferBuffer === 'function';
+  }
+
+  transferBuffer(bytes) {
+    if (!this.canTransferBuffer()) return null;
+    const device = this.devices.find((candidate) => candidate.selected);
+    const received = device.transferBuffer(bytes);
+    if (this.misoPin !== undefined && received.length) {
+      const pin = this.rp2040.gpio[this.misoPin];
+      pin.setInputValue(!!(received[received.length - 1] & 1));
+      pin.checkForUpdates();
+    }
+    return received;
+  }
 }
 
 module.exports = { SPIPeripheral };

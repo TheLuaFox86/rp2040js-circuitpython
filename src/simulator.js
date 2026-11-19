@@ -13,13 +13,13 @@ const { CardKB, CARDKB_ADDRESS } = require('./cardkb');
 const { ST7789 } = require('./st7789');
 const { startWebUI } = require('./web-ui');
 
-const CYCLES_PER_TICK = 100_000;
+const DEFAULT_CYCLES_PER_TICK = 100_000;
 const MAX_ELAPSED_MS = 50;
 const USBCTRL_IRQ = 5;
 const USB_HOST_POLL_INTERVAL_MS = 100;
 const USB_HOST_IRQ_PULSE_MS = 20;
 
-function createExecutionLoop(rp2040, clockHz, onTick, shouldServiceUsb) {
+function createExecutionLoop(rp2040, clockHz, cyclesPerTick, onTick, shouldServiceUsb) {
   if (typeof rp2040.executeInstruction !== 'function') {
     throw new Error('The installed rp2040js version does not expose executeInstruction()');
   }
@@ -62,7 +62,7 @@ function createExecutionLoop(rp2040, clockHz, onTick, shouldServiceUsb) {
       clockHz * MAX_ELAPSED_MS / 1000
     );
 
-    const budget = Math.min(Math.floor(cycleDebt), CYCLES_PER_TICK);
+    const budget = Math.min(Math.floor(cycleDebt), cyclesPerTick);
     if (budget > 0) {
       if (rp2040.waiting) {
         cycleDebt -= budget;
@@ -119,6 +119,10 @@ function createSimulator(config) {
     config.serial.port < 0 ||
     config.serial.port > 65535) {
     throw new TypeError('Simulator config requires firmwarePath and serial host/port settings');
+  }
+  if (config.cyclesPerTick !== undefined &&
+    (!Number.isSafeInteger(config.cyclesPerTick) || config.cyclesPerTick < 1)) {
+    throw new RangeError('Simulator cyclesPerTick must be a positive safe integer');
   }
   if (!Number.isInteger(config.gdbPort) || config.gdbPort < 0 || config.gdbPort > 65535) {
     throw new TypeError('Simulator config requires a valid gdbPort');
@@ -317,7 +321,13 @@ function createSimulator(config) {
 
   const inputQueue = [];
   let inputHead = 0;
-  const executionLoop = createExecutionLoop(rp2040, config.clockHz, pumpInput, () => cdc.initialized);
+  const executionLoop = createExecutionLoop(
+    rp2040,
+    config.clockHz,
+    config.cyclesPerTick ?? DEFAULT_CYCLES_PER_TICK,
+    pumpInput,
+    () => cdc.initialized
+  );
   const originalStop = rp2040.stop.bind(rp2040);
   rp2040.stop = function stop() {
     executionLoop.stop();

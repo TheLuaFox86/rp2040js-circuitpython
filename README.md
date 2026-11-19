@@ -25,6 +25,8 @@ The simulator prints the TCP console address in the launcher. Connect PuTTY usin
 
 The console carries CircuitPython's USB serial output and keyboard input. It buffers startup output until the client connects, and the emulated USB host services CDC output even when no keyboard input is sent. Press Enter at the initial prompt to enter the REPL; use Ctrl+D to soft-restart CircuitPython and Ctrl+E to enter paste mode. Stop the simulator with Ctrl+C in the launcher.
 
+`BOARD_CONFIG.cyclesPerTick` controls how many emulated CPU cycles run before the simulator yields to network and UI work. The default is `100_000`; lower values yield more often, while higher values may delay Telnet and WebUI input. Increasing the value may not improve total refresh time on slower hosts.
+
 The TCP console binds to `127.0.0.1` by default. Set `SERIAL_PORT` to change its port. To accept connections from another computer, set `SERIAL_HOST=0.0.0.0` and connect to this computer's LAN address. The TCP console has no authentication, so only expose it on a trusted network.
 
 ## Optional TFT and CardKB

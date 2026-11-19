@@ -45,11 +45,15 @@ const PAGE = `<!doctype html>
     });
     events.addEventListener('frame', (event) => {
       const frame = JSON.parse(event.data);
-      canvas.width = frame.width;
-      canvas.height = frame.height;
+      if (canvas.width !== frame.width || canvas.height !== frame.height) {
+        canvas.width = frame.width;
+        canvas.height = frame.height;
+      }
+      const frameWidth = frame.frameWidth ?? frame.width;
+      const frameHeight = frame.frameHeight ?? frame.height;
       const bytes = Uint8Array.from(atob(frame.pixels), (character) => character.charCodeAt(0));
-      const image = context.createImageData(frame.width, frame.height);
-      for (let index = 0; index < frame.width * frame.height; index++) {
+      const image = context.createImageData(frameWidth, frameHeight);
+      for (let index = 0; index < frameWidth * frameHeight; index++) {
         const pixel = bytes[index * 2] | (bytes[index * 2 + 1] << 8);
         const offset = index * 4;
         image.data[offset] = ((pixel >> 11) & 0x1f) * 255 / 31;
@@ -57,7 +61,7 @@ const PAGE = `<!doctype html>
         image.data[offset + 2] = (pixel & 0x1f) * 255 / 31;
         image.data[offset + 3] = 255;
       }
-      context.putImageData(image, 0, 0);
+      context.putImageData(image, frame.x ?? 0, frame.y ?? 0);
     });
     events.onopen = () => { status.dataset.connected = 'true'; };
     events.onerror = () => { status.dataset.connected = 'false'; };
@@ -92,8 +96,28 @@ const PAGE = `<!doctype html>
 
 function startWebUI({ host, port, tftEnabled, cardkbEnabled, onKey, getFrame }) {
   const clients = new Set();
-  let latestFrame = null;
+  let latestFramePixels = null;
+  let latestFrameWidth = 0;
+  let latestFrameHeight = 0;
+  let latestFrameSnapshot = null;
   let closeRequested = false;
+
+  function getLatestFrame() {
+    if (!latestFramePixels) return null;
+    if (!latestFrameSnapshot) {
+      latestFrameSnapshot = {
+        width: latestFrameWidth,
+        height: latestFrameHeight,
+        x: 0,
+        y: 0,
+        frameWidth: latestFrameWidth,
+        frameHeight: latestFrameHeight,
+        full: true,
+        pixels: latestFramePixels.toString('base64'),
+      };
+    }
+    return latestFrameSnapshot;
+  }
 
   function sendEvent(response, name, data) {
     response.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -187,11 +211,27 @@ function startWebUI({ host, port, tftEnabled, cardkbEnabled, onKey, getFrame }) 
 
   return {
     publishFrame(frame) {
-      latestFrame = frame;
+      if (!latestFramePixels || latestFrameWidth !== frame.width || latestFrameHeight !== frame.height) {
+        latestFramePixels = Buffer.alloc(frame.width * frame.height * 2);
+        latestFrameWidth = frame.width;
+        latestFrameHeight = frame.height;
+      }
+      const x = frame.x ?? 0;
+      const y = frame.y ?? 0;
+      const frameWidth = frame.frameWidth ?? frame.width;
+      const frameHeight = frame.frameHeight ?? frame.height;
+      const patch = Buffer.from(frame.pixels, 'base64');
+      const rowBytes = frameWidth * 2;
+      for (let row = 0; row < frameHeight; row++) {
+        const sourceStart = row * rowBytes;
+        const targetStart = ((y + row) * frame.width + x) * 2;
+        patch.copy(latestFramePixels, targetStart, sourceStart, sourceStart + rowBytes);
+      }
+      latestFrameSnapshot = null;
       for (const client of clients) sendEvent(client, 'frame', frame);
     },
     getFrame() {
-      return latestFrame;
+      return getLatestFrame();
     },
     close() {
       closeRequested = true;

@@ -1,0 +1,53 @@
+import time
+time.sleep(0.5)
+import os
+import busio
+import board
+import cardkb
+print("Wellcome!")
+import displayio
+import fourwire
+from adafruit_st7789 import ST7789
+
+# 1. Release any active displays
+displayio.release_displays()
+
+# 2. Initialize SPI0 explicitly for Raspberry Pi Pico
+spi = busio.SPI(clock=board.GP18, MOSI=board.GP19)
+
+tft_cs = board.GP17
+tft_dc = board.GP21
+tft_rst = board.GP20
+
+# Note: If your display does NOT have a CS pin, set chip_select=None
+display_bus = fourwire.FourWire(
+    spi, command=tft_dc, chip_select=tft_cs, reset=tft_rst
+)
+
+# 3. Initialize ST7789 (Configured for 240x240; adjust rowstart/width/height for other sizes)
+display = ST7789(
+    display_bus, width=240, height=240, rowstart=80, bgr=True, invert=True
+)
+
+# 4. Draw a test solid green screen
+main_group = displayio.Group()
+display.root_group = main_group
+
+color_bitmap = displayio.Bitmap(240, 240, 1)
+color_palette = displayio.Palette(1)
+color_palette[0] = 0x00FF00  # Bright Green
+
+bg_sprite = displayio.TileGrid(color_bitmap, pixel_shader=color_palette, x=0, y=0)
+main_group.append(bg_sprite)
+
+kb = cardkb.CardKB(i2c=busio.I2C(board.GP5, board.GP4), address=0x5F)
+while True:
+          print(kb.read_char())
+#    a = input(os.getcwd() + "> ")
+#    args = a.split(" ")
+#    if args[0] == "ls":
+#        for i in os.listdir("./"):
+#            print(i)
+
+#    elif args[0] == "cd":
+#        os.chdir(args[1])

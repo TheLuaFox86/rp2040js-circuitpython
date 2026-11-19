@@ -2,7 +2,12 @@ import board
 import busio
 import displayio
 import time
+import random
 from adafruit_st7789 import ST7789
+#from afafruit_bitmap_font import bitmap_font
+from adafruit_display_text import label
+import terminalio
+
 
 displayio.release_displays()
 
@@ -35,14 +40,29 @@ display = ST7789(
 # Use the lowest color depth needed (e.g., 4 colors = 2-bit, 16 colors = 4-bit) to save RAM
 fb_bitmap = displayio.Bitmap(240, 240, 16)
 fb_palette = displayio.Palette(16)
-fb_palette[0] = 0x00FF00  # Bright green test color
+fb_palette[0] = 0x0000FF  # Bright blue test color
 
 main_group = displayio.Group()
 main_group.append(displayio.TileGrid(fb_bitmap, pixel_shader=fb_palette))
-display.show(main_group)
 
+# Set text, font, and color
+text = "HELLO WORLD"
+font = terminalio.FONT
+color = 0xFF00FF
+
+# Create the tet label
+text_area = label.Label(font, text=text, color=color)
+
+# Set the location
+text_area.x = 20
+text_area.y = 20
+main_group.append(text_area)
 # Call display.refresh() manually at the end of each emulated frame
+display.show(main_group)
 display.refresh()
 
 while True:
-    time.sleep(0.01)
+    text_area.x = random.randint(20, 240)
+    text_area.y = random.randint(20, 240)
+    time.sleep(2)
+    display.refresh()

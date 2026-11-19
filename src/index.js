@@ -2,6 +2,7 @@ const { createSimulator } = require('./simulator');
 
 const BOARD_CONFIG = {
   clockHz: 125_000_000,
+  cyclesPerTick: 100_000,
   firmwarePath: 'firmware/firm.uf2',
   firmwareEntryPoint: 0x10000000,
   internalFilesystem: {
