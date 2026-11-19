@@ -8,6 +8,7 @@ const { startTcpConsole } = require('./tcp-console');
 const { createGPIOApi } = require('./gpio-api');
 const { SDCardImage } = require('./sd-card');
 const { SPIPeripheral } = require('./spi0');
+const { DMAPeripheral } = require('./dma');
 const { CardKB, CARDKB_ADDRESS } = require('./cardkb');
 const { ST7789 } = require('./st7789');
 const { startWebUI } = require('./web-ui');
@@ -312,6 +313,7 @@ function createSimulator(config) {
   }
 
   rp2040.peripherals[0x4003c + spiIndex * 4] = new SPIPeripheral(rp2040, devices, misoPin);
+  rp2040.peripherals[0x50000] = new DMAPeripheral(rp2040);
 
   const inputQueue = [];
   let inputHead = 0;

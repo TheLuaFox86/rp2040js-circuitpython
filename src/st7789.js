@@ -76,9 +76,12 @@ class ST7789 {
       this.pixelHighByte = value;
       return;
     }
-    if (this.cursorX >= 0 && this.cursorX < this.width &&
-      this.cursorY >= 0 && this.cursorY < this.height) {
-      this.pixels[this.cursorY * this.width + this.cursorX] =
+    const columnOffset = this.columnEnd >= this.width ? this.columnStart : 0;
+    const rowOffset = this.rowEnd >= this.height ? this.rowStart : 0;
+    const x = this.cursorX - columnOffset;
+    const y = this.cursorY - rowOffset;
+    if (x >= 0 && x < this.width && y >= 0 && y < this.height) {
+      this.pixels[y * this.width + x] =
         (this.pixelHighByte << 8) | value;
       this.dirty = true;
     }
