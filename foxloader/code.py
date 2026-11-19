@@ -64,5 +64,5 @@ display.refresh()
 
 while True:
     rando.rando(text_area)
-    time.sleep(2)
+    time.sleep(0.2)
     display.refresh()
