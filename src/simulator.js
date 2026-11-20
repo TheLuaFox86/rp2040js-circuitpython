@@ -19,6 +19,65 @@ const USBCTRL_IRQ = 5;
 const USB_HOST_POLL_INTERVAL_MS = 100;
 const USB_HOST_IRQ_PULSE_MS = 20;
 
+function installMaskedInterruptWakeModel(rp2040) {
+  const setInterrupt = rp2040.setInterrupt.bind(rp2040);
+  rp2040.setInterrupt = (irq, value) => {
+    setInterrupt(irq, value);
+    if (value && rp2040.waiting) rp2040.waiting = false;
+  };
+
+  const executeInstruction = rp2040.executeInstruction.bind(rp2040);
+  rp2040.executeInstruction = () => {
+    const opcode = rp2040.readUint16(rp2040.PC);
+    executeInstruction();
+    if ((opcode === 0xbf20 || opcode === 0xbf30) && rp2040.waiting && rp2040.pendingInterrupts) {
+      rp2040.waiting = false;
+    }
+  };
+}
+
+function installXipAliasModel(rp2040) {
+  const readUint32 = rp2040.readUint32.bind(rp2040);
+  rp2040.readUint32 = (address) => {
+    address >>>= 0;
+    if (address >= 0x11000000 && address < 0x14000000) {
+      address = 0x10000000 + (address & 0x00ffffff);
+    }
+    return readUint32(address);
+  };
+}
+
+function installClockSelectionModel(rp2040) {
+  const clocks = rp2040.peripherals[0x40008];
+  const readPeripheral = clocks.readUint32.bind(clocks);
+  const writePeripheral = clocks.writeUint32.bind(clocks);
+  let refControl = 0;
+  let sysControl = 0;
+
+  clocks.readUint32 = (offset) => {
+    switch (offset) {
+      case 0x30: return refControl;
+      case 0x38: return 1 << (refControl & 0x3);
+      case 0x3c: return sysControl;
+      case 0x44: return 1 << (sysControl & 0x1);
+      default: return readPeripheral(offset);
+    }
+  };
+
+  clocks.writeUint32 = (offset, value) => {
+    switch (offset) {
+      case 0x30:
+        refControl = value & 0xe3;
+        break;
+      case 0x3c:
+        sysControl = value & 0xe1;
+        break;
+      default:
+        writePeripheral(offset, value);
+    }
+  };
+}
+
 function createExecutionLoop(rp2040, clockHz, cyclesPerTick, onTick, shouldServiceUsb) {
   if (typeof rp2040.executeInstruction !== 'function') {
     throw new Error('The installed rp2040js version does not expose executeInstruction()');
@@ -155,8 +214,13 @@ function createSimulator(config) {
 
   const rp2040 = new RP2040();
   rp2040.loadBootrom(bootromB1);
+  // QSPI SS (GPIO 29) is inactive-high when the flash is not selected.
+  rp2040.qspi[1].setInputValue(true);
   rp2040.logger = new ConsoleLogger(LogLevel.Off);
   loadUF2(config.firmwarePath, rp2040);
+  installClockSelectionModel(rp2040);
+  installXipAliasModel(rp2040);
+  installMaskedInterruptWakeModel(rp2040);
   if (config.firmwareEntryPoint !== undefined) {
     if (!Number.isInteger(config.firmwareEntryPoint)) {
       throw new TypeError('firmwareEntryPoint must be an integer address');

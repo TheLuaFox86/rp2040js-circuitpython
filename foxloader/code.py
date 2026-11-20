@@ -1,6 +1,7 @@
 import board
 import busio
 import displayio
+from fourwire import FourWire
 import time
 import random
 import rando
@@ -24,7 +25,7 @@ tft_cs = board.GP13
 tft_dc = board.GP14
 tft_rst = board.GP15
 
-display_bus = displayio.FourWire(
+display_bus = FourWire(
     spi, command=tft_dc, chip_select=tft_cs, reset=tft_rst
 )
 
@@ -59,7 +60,7 @@ text_area.x = 20
 text_area.y = 20
 main_group.append(text_area)
 # Call display.refresh() manually at the end of each emulated frame
-display.show(main_group)
+display.root_group = main_group
 display.refresh()
 
 while True:

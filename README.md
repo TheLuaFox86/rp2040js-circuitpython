@@ -4,7 +4,7 @@ A simple CircuitPython on Raspberry Pi Pico simulator, built on top of the [rp20
 
 You can use this simulator to run the release firmware of CircuitPython on your computer, even if you
 don't have access to the physical hardware. You can use it for automated testing (e.g. in a CI environment), as well as for educational purposes.
-The bundled `firmware/firm.uf2` is the stable CircuitPython 7.3.3 build for Raspberry Pi Pico.
+The bundled `firmware/firm.uf2` is CircuitPython 10.3.2 for Raspberry Pi Pico. The libraries in `firmware/firmfs.img` use Adafruit’s 10.x bundle (20261023); keep the filesystem libraries matched to the firmware major version.
 
 If you are looking for a full-blown, user friendly CircuitPython simulator, please check out [Wokwi](https://wokwi.com): Start a [new CircuitPython project on Wokwi](https://wokwi.com/arduino/new?template=circuitpython-pi-pico).
 
