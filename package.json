@@ -5,8 +5,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node --no-warnings src/index.js",
-    "mountFS": "sudo mount -o loop,uid=$(id -u $USER),gid=$(id -g $USER) firmware/firmfs.img ./mnt_dir && echo use npm run unmountFS to safly unmount the filesystem",
-    "unmountFS": "sudo umount ./mnt_dir",
+    "mount0": "sudo mount -o loop,uid=$(id -u $USER),gid=$(id -g $USER) firmware/firmfs.img ./mnt_dir && echo use npm run unmount to safly unmount the filesystem",
+    "unmount": "sudo umount ./mnt_dir",
+    "mount1": "sudo mount -o loop,uid=$(id -u $USER),gid=$(id -g $USER) firmware/InternalSD.img ./mnt_dir && echo use npm run unmount to safly unmount the filesystem",
     "test": "node --test"
   },
   "repository": {

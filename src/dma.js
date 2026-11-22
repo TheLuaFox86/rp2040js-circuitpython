@@ -147,7 +147,7 @@ class DMAPeripheral extends BasePeripheral {
     const offset = tx.writeAddress & 0x3fff;
     const peripheralKey = (tx.writeAddress >>> 14) << 2;
     const spi = this.rp2040.peripherals[peripheralKey];
-    if (offset !== 0x08 || !spi || typeof spi.canTransferBuffer !== 'function' ||
+    if ((offset !== 0x08 && offset !== 0x60) || !spi || typeof spi.canTransferBuffer !== 'function' ||
       !spi.canTransferBuffer()) return false;
 
     const bytes = new Uint8Array(count);

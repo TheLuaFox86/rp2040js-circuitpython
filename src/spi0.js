@@ -1,6 +1,7 @@
 const { BasePeripheral } = require('rp2040js');
 
-const DATA_REGISTER = 0x08;
+const DATA_REGISTER = 0x60;
+const LEGACY_DATA_REGISTER = 0x08;
 const FIFO_DEPTH = 8;
 
 const INTERRUPT_RX_OVERFLOW = 1 << 0;
@@ -18,6 +19,8 @@ class SPIPeripheral extends BasePeripheral {
   resetRegisters() {
     this.ctrlr0 = 0x7;
     this.ctrlr1 = 0;
+    this.ssienr = 0;
+    this.legacyDataRegister = false;
     this.baudr = 0;
     this.interruptMask = 0;
     this.rawInterruptStatus = 0;
@@ -26,7 +29,7 @@ class SPIPeripheral extends BasePeripheral {
   }
 
   get enabled() {
-    return !!(this.ctrlr1 & 0x2);
+    return this.ssienr === 1 || !!(this.ctrlr1 & 0x2);
   }
 
   get status() {
@@ -59,6 +62,9 @@ class SPIPeripheral extends BasePeripheral {
     if (offset === DATA_REGISTER) {
       return this.readData();
     }
+    if (offset === LEGACY_DATA_REGISTER) {
+      return this.legacyDataRegister ? this.readData() : this.ssienr;
+    }
     switch (offset) {
       case 0x00: return this.ctrlr0;
       case 0x04: return this.ctrlr1;
@@ -78,6 +84,15 @@ class SPIPeripheral extends BasePeripheral {
   writeUint32(offset, value) {
     if (offset === DATA_REGISTER) {
       this.writeData(value);
+      return;
+    }
+    if (offset === LEGACY_DATA_REGISTER) {
+      if (!this.legacyDataRegister && !(this.ctrlr1 & 0x2) && (value === 0 || value === 1)) {
+        this.ssienr = value;
+      } else {
+        this.legacyDataRegister = true;
+        this.writeData(value);
+      }
       return;
     }
     switch (offset) {

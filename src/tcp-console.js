@@ -20,26 +20,29 @@ function startTcpConsole({ host, port, onSerialBytes }) {
   let closeRequested = false;
 
   function writeRawToSocket(socket, bytes) {
-    const output = [];
+    const output = Buffer.allocUnsafe(bytes.length * 2);
+    let length = 0;
     for (let index = 0; index < bytes.length; index++) {
       const byte = bytes[index];
       if (byte === IAC) {
-        output.push(IAC, IAC);
+        output[length++] = IAC;
+        output[length++] = IAC;
       } else if (byte === 13) {
-        output.push(13);
+        output[length++] = 13;
         if (bytes[index + 1] === 10) {
-          output.push(10);
+          output[length++] = 10;
           index++;
         } else {
-          output.push(0);
+          output[length++] = 0;
         }
       } else if (byte === 10) {
-        output.push(13, 10);
+        output[length++] = 13;
+        output[length++] = 10;
       } else {
-        output.push(byte);
+        output[length++] = byte;
       }
     }
-    socket.write(Buffer.from(output));
+    socket.write(output.subarray(0, length));
   }
 
   function telnetReply(socket, command, option) {

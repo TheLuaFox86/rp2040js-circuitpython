@@ -14,6 +14,7 @@ const { ST7789 } = require('./st7789');
 const { startWebUI } = require('./web-ui');
 
 const DEFAULT_CYCLES_PER_TICK = 100_000;
+const MAX_EXECUTION_SLICE_MS = 4;
 const MAX_ELAPSED_MS = 50;
 const USBCTRL_IRQ = 5;
 const USB_HOST_POLL_INTERVAL_MS = 100;
@@ -127,11 +128,14 @@ function createExecutionLoop(rp2040, clockHz, cyclesPerTick, onTick, shouldServi
         cycleDebt -= budget;
       } else {
         let executed = 0;
+        let instructionCount = 0;
+        let nextTimeCheck = performance.now() + MAX_EXECUTION_SLICE_MS;
         while (executed < budget && running && !rp2040.waiting) {
           const previousCycles = rp2040.cycles;
           rp2040.executeInstruction();
           const instructionCycles = rp2040.cycles - previousCycles;
           executed += instructionCycles > 0 ? instructionCycles : 1;
+          if ((++instructionCount & 0xff) === 0 && performance.now() >= nextTimeCheck) break;
         }
         cycleDebt = Math.max(0, cycleDebt - executed);
       }
@@ -344,7 +348,7 @@ function createSimulator(config) {
           throw new RangeError(`TFT ${name} must be an integer from 1 to 320`);
         }
       }
-      tft = new ST7789(rp2040, { ...tftConfig, pins: tftPins });
+      tft = new ST7789(rp2040, { ...tftConfig, pins: tftPins }, undefined, { asyncRefresh: true });
       const chipSelectPin = rp2040.gpio[tftPins.chipSelect];
       chipSelectPin.addListener((state) => {
         tft.selected = state === GPIOPinState.Low;
@@ -409,6 +413,7 @@ function createSimulator(config) {
   let disposed = false;
 
   cdc.onSerialData = (value) => {
+    config.onSerialData?.(value);
     if (typeof value === 'number') {
       tcpConsole?.write(Buffer.from([value & 0xff]));
     } else if (typeof value === 'string') {
@@ -436,12 +441,14 @@ function createSimulator(config) {
   function start() {
     if (started) throw new Error('Simulator is already running');
     if (disposed) throw new Error('Simulator has already been stopped');
-    tcpConsole = startTcpConsole({
-      ...config.serial,
-      onSerialBytes(bytes) {
-        for (const byte of bytes) inputQueue.push(byte);
-      },
-    });
+    if (!config.workerMode) {
+      tcpConsole = startTcpConsole({
+        ...config.serial,
+        onSerialBytes(bytes) {
+          for (const byte of bytes) inputQueue.push(byte);
+        },
+      });
+    }
     try {
       gdbServer = new GDBTCPServer(rp2040, config.gdbPort);
       gdbServer.socketServer.on('connection', (socket) => {
@@ -449,7 +456,7 @@ function createSimulator(config) {
         socket.once('close', () => gdbClients.delete(socket));
       });
     } catch (error) {
-      tcpConsole.close();
+      tcpConsole?.close();
       tcpConsole = undefined;
       throw error;
     }
@@ -484,6 +491,7 @@ function createSimulator(config) {
     rp2040.stop();
     tcpConsole?.close();
     webUI?.close();
+    tft?.close();
     for (const socket of gdbClients) socket.destroy();
     gdbServer?.socketServer?.close();
     for (const card of cards) card.close();
@@ -503,6 +511,9 @@ function createSimulator(config) {
         gdb: gdbServer?.socketServer,
         web: webUI?.server,
       };
+    },
+    enqueueSerialBytes(bytes) {
+      for (const byte of bytes) inputQueue.push(byte);
     },
   };
   return simulator;

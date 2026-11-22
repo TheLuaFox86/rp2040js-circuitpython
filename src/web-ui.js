@@ -34,6 +34,12 @@ const PAGE = `<!doctype html>
     const keyboardSection = document.querySelector('#keyboard-section');
     const canvas = document.querySelector('#display');
     const context = canvas.getContext('2d');
+    // RGB565 is expanded for every pixel, so keep the channel conversion in
+    // small lookup tables instead of doing divisions in the frame loop.
+    const red565 = Uint8Array.from({ length: 32 }, (_, value) => Math.round(value * 255 / 31));
+    const green565 = Uint8Array.from({ length: 64 }, (_, value) => Math.round(value * 255 / 63));
+    const blue565 = red565;
+    let imageData = null;
     const events = new EventSource('/events');
     events.addEventListener('status', (event) => {
       const state = JSON.parse(event.data);
@@ -51,14 +57,17 @@ const PAGE = `<!doctype html>
       }
       const frameWidth = frame.frameWidth ?? frame.width;
       const frameHeight = frame.frameHeight ?? frame.height;
-      const bytes = Uint8Array.from(atob(frame.pixels), (character) => character.charCodeAt(0));
-      const image = context.createImageData(frameWidth, frameHeight);
+      const encoded = atob(frame.pixels);
+      const image = imageData?.width === frameWidth && imageData?.height === frameHeight
+        ? imageData
+        : (imageData = context.createImageData(frameWidth, frameHeight));
       for (let index = 0; index < frameWidth * frameHeight; index++) {
-        const pixel = bytes[index * 2] | (bytes[index * 2 + 1] << 8);
+        const byteOffset = index * 2;
+        const pixel = encoded.charCodeAt(byteOffset) | (encoded.charCodeAt(byteOffset + 1) << 8);
         const offset = index * 4;
-        image.data[offset] = ((pixel >> 11) & 0x1f) * 255 / 31;
-        image.data[offset + 1] = ((pixel >> 5) & 0x3f) * 255 / 63;
-        image.data[offset + 2] = (pixel & 0x1f) * 255 / 31;
+        image.data[offset] = red565[(pixel >> 11) & 0x1f];
+        image.data[offset + 1] = green565[(pixel >> 5) & 0x3f];
+        image.data[offset + 2] = blue565[pixel & 0x1f];
         image.data[offset + 3] = 255;
       }
       context.putImageData(image, frame.x ?? 0, frame.y ?? 0);
@@ -119,8 +128,8 @@ function startWebUI({ host, port, tftEnabled, cardkbEnabled, onKey, getFrame }) 
     return latestFrameSnapshot;
   }
 
-  function sendEvent(response, name, data) {
-    response.write(`event: ${name}\ndata: ${JSON.stringify(data)}\n\n`);
+  function sendEvent(response, name, data, serialized = JSON.stringify(data)) {
+    response.write(`event: ${name}\ndata: ${serialized}\n\n`);
   }
 
   const server = http.createServer((request, response) => {
@@ -221,14 +230,21 @@ function startWebUI({ host, port, tftEnabled, cardkbEnabled, onKey, getFrame }) 
       const frameWidth = frame.frameWidth ?? frame.width;
       const frameHeight = frame.frameHeight ?? frame.height;
       const patch = Buffer.from(frame.pixels, 'base64');
-      const rowBytes = frameWidth * 2;
-      for (let row = 0; row < frameHeight; row++) {
-        const sourceStart = row * rowBytes;
-        const targetStart = ((y + row) * frame.width + x) * 2;
-        patch.copy(latestFramePixels, targetStart, sourceStart, sourceStart + rowBytes);
+      if (x === 0 && y === 0 && frameWidth === frame.width && frameHeight === frame.height) {
+        // The decoded full frame is already a private snapshot; retain it
+        // directly instead of copying all pixels into another full-size buffer.
+        latestFramePixels = patch;
+      } else {
+        const rowBytes = frameWidth * 2;
+        for (let row = 0; row < frameHeight; row++) {
+          const sourceStart = row * rowBytes;
+          const targetStart = ((y + row) * frame.width + x) * 2;
+          patch.copy(latestFramePixels, targetStart, sourceStart, sourceStart + rowBytes);
+        }
       }
       latestFrameSnapshot = null;
-      for (const client of clients) sendEvent(client, 'frame', frame);
+      const serializedFrame = JSON.stringify(frame);
+      for (const client of clients) sendEvent(client, 'frame', frame, serializedFrame);
     },
     getFrame() {
       return getLatestFrame();
