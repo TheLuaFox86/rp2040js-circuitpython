@@ -20,6 +20,7 @@ const BOARD_CONFIG = {
     controller: 0,
     cards: [
       { image: 'firmware/InternalSD.img', chipSelect: 17 },
+      { image: 'firmware/ExternalSD.img', chipSelect: 20}
     ],
     pins: {
       sck: 18,

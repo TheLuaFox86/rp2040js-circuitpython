@@ -1,18 +1,21 @@
 {
   "name": "rp2040js-circuitpython",
-  "version": "1.0.0",
-  "description": "CircuitPython Simulator using RP2040js",
+  "version": "0.0.1",
+  "description": "CircuitPython Simulator using RP2040js. Forked from The Creator Of Wokwi",
   "main": "src/index.js",
+  "bin": {
+    "rp2040sim": "bin/cli.js"
+  },
   "scripts": {
     "start": "node --no-warnings src/index.js",
-    "mount0": "sudo mount -o loop,uid=$(id -u $USER),gid=$(id -g $USER) firmware/firmfs.img ./mnt_dir && echo use npm run unmount to safly unmount the filesystem",
+    "mount": "mkdir -p ./mnt_dir && sudo mount -o loop,uid=$(id -u),gid=$(id -g) $IMG ./mnt_dir && echo 'use npm run unmount to safely unmount the filesystem'",
     "unmount": "sudo umount ./mnt_dir",
-    "mount1": "sudo mount -o loop,uid=$(id -u $USER),gid=$(id -g $USER) firmware/InternalSD.img ./mnt_dir && echo use npm run unmount to safly unmount the filesystem",
+    "updateBoard": "node src/createBoardJSON.js",
     "test": "node --test"
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/wokwi/rp2040js-circuitpython.git"
+    "url": "git+https://github.com/TheLuaFox86/rp2040js-circuitpython"
   },
   "keywords": [
     "circuitpython",
