@@ -1,5 +1,5 @@
 fs = require("node:fs")
-fs,fileWriteSync("./Board.json", {
+fs.writeFileSync("./Board.json", JSON.stringify({
   clockHz: 133_000_000,
   // Permit larger bursts for display-heavy firmware; simulator.js still yields
   // after a short wall-clock slice so telnet and WebUI stay responsive.
@@ -50,4 +50,4 @@ fs,fileWriteSync("./Board.json", {
   onUSBConnected(cdc) {
     console.error('CDC_CONNECTED', cdc.initialized, cdc.inEndpoint, cdc.outEndpoint);
   },
-})
+}))
