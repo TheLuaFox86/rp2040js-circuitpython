@@ -92,13 +92,18 @@ const PAGE = `<!doctype html>
       event.preventDefault();
       sendKey(event.data);
     });
+    // In your template literal (PAGE), change the keydown handler to:
     keyboard.addEventListener('keydown', (event) => {
       if (event.ctrlKey || event.metaKey || event.altKey) return;
-      const key = { Enter: '\\r', Backspace: '\\b', Tab: '\\t', Escape: '\\x1b' }[event.key];
+      const key = {
+        Enter: '\\r', Backspace: '\\b', Tab: '\\t', Escape: '\\x1b',
+        ArrowUp: '\\xb5', ArrowDown: '\\xb6',
+        ArrowLeft: '\\xb4', ArrowRight: '\\xb7'
+      }[event.key];
       if (!key) return;
       event.preventDefault();
       sendKey(key);
-    });
+    });   
   </script>
 </body>
 </html>`;

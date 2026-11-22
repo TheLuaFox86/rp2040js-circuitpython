@@ -1,5 +1,12 @@
+
 const CARDKB_ADDRESS = 0x5f;
 const MAX_BUFFERED_KEYS = 256;
+
+// CardKB arrow key byte values (Fn+key on physical unit)
+const ARROW_LEFT   = 0xB4;
+const ARROW_UP     = 0xB5;
+const ARROW_DOWN   = 0xB6;
+const ARROW_RIGHT  = 0xB7;   
 
 class CardKB {
   constructor(i2c, address = CARDKB_ADDRESS) {

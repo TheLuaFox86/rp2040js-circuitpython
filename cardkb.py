@@ -99,6 +99,14 @@ class CardKB:
             return data, MOD_NONE
         raise ValueError("keycode is not an arrow key")
 
+    @staticmethod
+    def keycode_to_arrow(data):
+        arrows = {
+            0xB4: "LEFT", 0xB5: "UP", 0xB6: "DOWN", 0xB7: "RIGHT",
+            0x98: "LEFT", 0x99: "UP", 0xA4: "DOWN", 0xA5: "RIGHT",
+        }
+        return arrows.get(data, "")
+
     def read_char(self, wait=True):
         """Return the next supported ASCII character, or ``None`` if none is ready.
 
