@@ -1,4 +1,5 @@
 const fs = require('fs');
+const path = require('path');
 
 const SECTOR_SIZE = 512;
 const DATA_TOKEN = 0xfe;
@@ -38,11 +39,40 @@ function setCsdBits(csd, mostSignificantBit, leastSignificantBit, value) {
 }
 
 class SDCardImage {
-  constructor({ image, chipSelect }) {
-    if (!image) throw new Error('SD card config requires an image path');
-    this.image = image;
+  constructor(config) {
+    const { image, folder, chipSelect } = config || {};
     this.chipSelect = chipSelect;
-    this.fd = fs.openSync(image, 'r+');
+    
+    let targetImage = image;
+
+    // If a folder is provided, map it to a virtual disk image file
+    if (folder) {
+      const folderPath = path.resolve(folder);
+      if (!fs.existsSync(folderPath)) {
+        fs.mkdirSync(folderPath, { recursive: true });
+      }
+      
+      // Define a cache/backing image file inside or alongside the folder
+      targetImage = path.join(folderPath, '.sd_card_virtual.img');
+      
+      // If the virtual image doesn't exist, create a default formatted FAT image 
+      // (or minimal size so the partition table / boot sector can be read)
+      if (!fs.existsSync(targetImage)) {
+        const defaultSectors = 32768; // 16MB standard small SD card size
+        const buf = Buffer.alloc(defaultSectors * SECTOR_SIZE);
+        
+        // Write a basic MBR / boot sector signature (0x55AA at the end of sector 0)
+        buf.writeUInt16LE(0xaa55, 510);
+        
+        fs.writeFileSync(targetImage, buf);
+      }
+    }
+
+    if (!targetImage) throw new Error('SD card config requires an image path or folder path');
+    
+    this.image = targetImage;
+    this.fd = fs.openSync(this.image, 'r+');
+    
     let stat;
     try {
       stat = fs.fstatSync(this.fd);
@@ -50,15 +80,16 @@ class SDCardImage {
       fs.closeSync(this.fd);
       throw error;
     }
+    
     if (!stat.isFile() || stat.size < SECTOR_SIZE || stat.size % SECTOR_SIZE !== 0) {
       fs.closeSync(this.fd);
-      throw new Error(`SD card image must be a non-empty multiple of 512 bytes: ${image}`);
+      throw new Error(`SD card image must be a non-empty multiple of 512 bytes: ${this.image}`);
     }
 
     this.sectorCount = stat.size / SECTOR_SIZE;
     if (this.sectorCount > 0x100000000) {
       fs.closeSync(this.fd);
-      throw new RangeError(`SD card image exceeds the SDHC address limit: ${image}`);
+      throw new RangeError(`SD card image exceeds the SDHC address limit: ${this.image}`);
     }
     this.highCapacity = this.sectorCount >= 4 * 1024 * 1024;
     this.selected = false;
@@ -166,7 +197,7 @@ class SDCardImage {
         }
         const data = Buffer.alloc(SECTOR_SIZE);
         const bytesRead = fs.readSync(this.fd, data, 0, SECTOR_SIZE, sector * SECTOR_SIZE);
-        if (bytesRead !== SECTOR_SIZE) throw new Error(`Could not read SD card sector ${sector} from ${this.image}`);
+        if (bytesRead !== SECTOR_SIZE) throw new Error(`Could not read SD card sector ${sector}`);
         queueData(idleResponse, data);
         break;
       }
@@ -248,7 +279,7 @@ class SDCardImage {
     }
     const block = Buffer.from(bytes.slice(0, SECTOR_SIZE));
     const bytesWritten = fs.writeSync(this.fd, block, 0, block.length, sector * SECTOR_SIZE);
-    if (bytesWritten !== block.length) throw new Error(`Could not write SD card sector ${sector} to ${this.image}`);
+    if (bytesWritten !== block.length) throw new Error(`Could not write SD card sector ${sector}`);
     this.response.push(0x05, 0x00, 0xff);
     if (multi) {
       this.writeState = { sector: sector + 1, bytes: [], tokenReceived: false, multi: true };
@@ -267,7 +298,7 @@ class SDCardImage {
     }
     const data = Buffer.alloc(SECTOR_SIZE);
     const bytesRead = fs.readSync(this.fd, data, 0, SECTOR_SIZE, sector * SECTOR_SIZE);
-    if (bytesRead !== SECTOR_SIZE) throw new Error(`Could not read SD card sector ${sector} from ${this.image}`);
+    if (bytesRead !== SECTOR_SIZE) throw new Error(`Could not read SD card sector ${sector}`);
     const checksum = crc16(data);
     this.response.push(
       0xff,
