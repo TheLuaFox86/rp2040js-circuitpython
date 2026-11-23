@@ -40,57 +40,63 @@ function setCsdBits(csd, mostSignificantBit, leastSignificantBit, value) {
 
 class SDCardImage {
   constructor(config) {
-    const { image, folder, chipSelect } = config || {};
+    const { image, device, folder, chipSelect } = config || {};
     this.chipSelect = chipSelect;
-    
-    let targetImage = image;
 
-    // If a folder is provided, map it to a virtual disk image file
-    if (folder) {
-      const folderPath = path.resolve(folder);
-      if (!fs.existsSync(folderPath)) {
-        fs.mkdirSync(folderPath, { recursive: true });
+    let targetPath = image;
+
+    if (device) {
+      // Real physical block device path (e.g. /dev/sdb or \\.\PhysicalDrive1)
+      targetPath = device;
+    } else if (folder) {
+      // Host folder mapping to a virtual disk backing file inside that folder
+      const resolvedFolder = path.resolve(folder);
+      if (!fs.existsSync(resolvedFolder)) {
+        fs.mkdirSync(resolvedFolder, { recursive: true });
       }
-      
-      // Define a cache/backing image file inside or alongside the folder
-      targetImage = path.join(folderPath, '.sd_card_virtual.img');
-      
-      // If the virtual image doesn't exist, create a default formatted FAT image 
-      // (or minimal size so the partition table / boot sector can be read)
-      if (!fs.existsSync(targetImage)) {
-        const defaultSectors = 32768; // 16MB standard small SD card size
+      targetPath = path.join(resolvedFolder, '.sd_virtual_disk.img');
+      if (!fs.existsSync(targetPath)) {
+        // Initialize a default 32MB virtual disk image
+        const defaultSectors = 65536;
         const buf = Buffer.alloc(defaultSectors * SECTOR_SIZE);
-        
-        // Write a basic MBR / boot sector signature (0x55AA at the end of sector 0)
-        buf.writeUInt16LE(0xaa55, 510);
-        
-        fs.writeFileSync(targetImage, buf);
+        buf.writeUInt16LE(0xaa55, 510); // MBR signature
+        fs.writeFileSync(targetPath, buf);
       }
     }
 
-    if (!targetImage) throw new Error('SD card config requires an image path or folder path');
-    
-    this.image = targetImage;
+    if (!targetPath) {
+      throw new Error('SD card config requires an image path, device path, or folder path');
+    }
+
+    this.image = targetPath;
     this.fd = fs.openSync(this.image, 'r+');
-    
+
     let stat;
     try {
       stat = fs.fstatSync(this.fd);
     } catch (error) {
-      fs.closeSync(this.fd);
-      throw error;
-    }
-    
-    if (!stat.isFile() || stat.size < SECTOR_SIZE || stat.size % SECTOR_SIZE !== 0) {
-      fs.closeSync(this.fd);
-      throw new Error(`SD card image must be a non-empty multiple of 512 bytes: ${this.image}`);
+      // Some OS raw block devices don't report size via fstat; fallback or handle gracefully
+      stat = { isFile: () => false, size: 32 * 1024 * 1024 }; // Default 32MB fallback for raw devices
     }
 
-    this.sectorCount = stat.size / SECTOR_SIZE;
+    // Determine sector count
+    if (stat.isFile && stat.isFile()) {
+      if (stat.size < SECTOR_SIZE || stat.size % SECTOR_SIZE !== 0) {
+        fs.closeSync(this.fd);
+        throw new Error(`SD card target must be a multiple of 512 bytes: ${this.image}`);
+      }
+      this.sectorCount = stat.size / SECTOR_SIZE;
+    } else {
+      // For raw block devices where fstat size might not be fully reliable
+      const stats = fs.statSync(this.image);
+      this.sectorCount = stats.size > 0 ? stats.size / SECTOR_SIZE : 65536;
+    }
+
     if (this.sectorCount > 0x100000000) {
       fs.closeSync(this.fd);
-      throw new RangeError(`SD card image exceeds the SDHC address limit: ${this.image}`);
+      throw new RangeError(`SD card size exceeds the SDHC address limit: ${this.image}`);
     }
+
     this.highCapacity = this.sectorCount >= 4 * 1024 * 1024;
     this.selected = false;
     this.idle = true;
